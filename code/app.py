@@ -1,3 +1,4 @@
+import os
 import gradio as gr
 from llm_agent import split_profile, evaluate_profile, generate_resume
 
@@ -23,7 +24,7 @@ def read_file_content(file_path: str) -> str:
         return f"Error reading file: {str(e)}"
 
 
-def process_file(file, resume_state):
+def process_file(file, resume_state, llm_choice):
     """Process uploaded file and return paragraph textboxes."""
     if file is None:
         return [gr.update(visible=False)] * MAX_EXP  # Hide all textboxes
@@ -38,7 +39,7 @@ def process_file(file, resume_state):
         return updates
     
     # Parse into paragraphs
-    paragraphs = split_profile(content)
+    paragraphs = split_profile(content, llm_choice)
     resume_state += "/n/n".join(paragraphs)
     
     # Create updates for textboxes
@@ -70,11 +71,21 @@ def create_file_parser_interface(resume_state):
                 file_types=[".txt",],
                 type="filepath"
             )
-            
+
+            llm_radio = gr.Radio(
+                label="LLM used",
+                choices=[
+                    "GPT 4o",
+                    "Claude Sonnet 4.5",
+                    "Llama 3.2 3b (2GB)",
+                    "Qwen 2.5 32b (35GB)"
+                ],
+                value="Claude Sonnet 4.5"
+            )
+
         with gr.Column(scale=2):
             gr.Markdown("## Parsed Resume")
             gr.Markdown("Edit the paragraphs below as needed:")
-            
             # Create 10 textboxes for paragraphs (hidden initially)
             paragraph_textboxes = []
             for i in range(MAX_EXP):
@@ -91,13 +102,13 @@ def create_file_parser_interface(resume_state):
     # Event handlers
     file_upload.change(
         fn=process_file,
-        inputs=[file_upload, resume_state],
+        inputs=[file_upload, resume_state, llm_radio],
         outputs=paragraph_textboxes + [resume_state]
     )
-    return resume_state
+    return resume_state, llm_radio
 
 
-def create_resume_processor_interface(resume_state):
+def create_resume_processor_interface(resume_state, llm_choice_component):
     
     gr.Markdown("# Job Evaluation & Resume Generation")
     
@@ -154,13 +165,13 @@ def create_resume_processor_interface(resume_state):
     # Event handlers
     evaluate_btn.click(
         fn=evaluate_profile,
-        inputs=[input_textbox, resume_state],
+        inputs=[input_textbox, resume_state, llm_choice_component],
         outputs=[result_textbox]
     )
     
     generate_btn.click(
         fn=generate_resume,
-        inputs=[input_textbox, resume_state],
+        inputs=[input_textbox, resume_state, llm_choice_component],
         outputs=[result_textbox]
     )
     
@@ -183,9 +194,9 @@ def create_blocks_based_app():
         
         with gr.Tabs():
             with gr.Tab("File Parser"):
-                resume_state = create_file_parser_interface(resume_state)
+                resume_state, llm_choice_component = create_file_parser_interface(resume_state)
             with gr.Tab("Evaluate/Generate"):
-                create_resume_processor_interface(resume_state)
+                create_resume_processor_interface(resume_state, llm_choice_component)
             # with gr.Tab("Settings"):
             #     gr.Markdown("## Application Settings")
             #     theme_choice = gr.Radio(
@@ -206,7 +217,3 @@ def create_blocks_based_app():
             #         outputs=settings_output
             #     )
     return app
-
-
-app = create_blocks_based_app()
-app.launch(share=False, debug=True)
